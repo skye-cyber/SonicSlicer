@@ -13,29 +13,19 @@ from .validators import (
 from .colors import foreground as fg
 from .colors import background as bg
 from .formarts import AudioFormarts
+from .utils.log.loger import get_logger
+from .utils.docs.doc import prep_doc
+from .bulk import DirBuster
+from .decorators import for_loop_decorator as loop
+from .decorators import threaded_for_loop
+
+logger = get_logger()
 
 RESET = fg.RESET
 
 
 def duration_check(time):
     return isinstance(time, (int, str))
-
-
-def prep_doc():
-    doc = f"""\n\
-{fg.DWHITE_FG}Example Usage:{RESET}
-    {fg.LWHITE_FG}File Splitting{RESET}:
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} file.mp3 {fg.CYAN_FG}--split --size{RESET} 1mb  {fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # Using mb{RESET}
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} file.mp3 {fg.CYAN_FG}--split --size{RESET} 100kb  {fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # using kilobytes{RESET}
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} file.mp3 {fg.CYAN_FG}--split --duration{RESET} 1min {fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # Split into 1 minute chunks{RESET}
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} file.mp3 {fg.CYAN_FG}--split --duration{RESET} 1min {fg.CYAN_FG}--count{RESET} 4 {fg.CYAN_FG}--strict{RESET} {fg.CYAN_FG}-O{RESET} splits{RESET}
-    {fg.LWHITE_FG}Trimming{bg.RESET}{RESET}:
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} file.mp3 {fg.CYAN_FG}--trim{RESET} {fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # Trims from 0 to end{RESET}
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} fime.mp3 {fg.CYAN_FG}--trim --trim_start{RESET} 10sec {fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # Discards the first 10 seconds{RESET}
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} fime.mp3 {fg.CYAN_FG}--trim --trim_end{RESET} 1min {fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # Discards the last 1 minutes{RESET}
-        {fg.GREEN_FG}slicer{fg.YELLOW_FG} fime.mp3 {fg.CYAN_FG}--trim --trim_start{RESET} 10sec {fg.CYAN_FG}--trim_end{RESET} 30sec {fg.DWHITE_FG}{fg.DWHITE_FG}⤗{RESET}{fg.FWHITE_FG} # Discards the first 10 and last seconds respectively{RESET}
-        """
-    print(doc)
 
 
 def main():
@@ -113,6 +103,8 @@ def main():
 
     processor = AudioProcessor(output_format=args.format, bitrate=bitrate)
 
+    input_file = Path(args.file)
+
     """ SPLIT OPERATION """
     if args.split:
         # Split by size
@@ -120,10 +112,35 @@ def main():
             try:
                 size, units = validate_size(args.size)
                 size_bytes = size * 1024 if units == "kb" else size * 1024 * 1024
-                chunks = processor.split_by_size(
-                    args.file, size_bytes, sections, args.strict, output
-                )
-                print(f"Created {fg.BLUE_FG}{len(chunks)}{RESET} size-based chunks")
+                logger.debug(input_file.is_dir())
+                if input_file.is_dir():
+                    buster = DirBuster(args.file)
+                    file_targets = buster.get_dir_files()
+                    workers = 4 if len(file_targets) > 3 else len(file_targets)
+
+                    @threaded_for_loop(file_targets, max_workers=workers)
+                    def action(file):
+                        logger.info(
+                            f"Splitting {fg.BLUE_FG}{file}{RESET} time-based chunks"
+                        )
+                        chunks = processor.split_by_size(
+                            file, size_bytes, sections, args.strict, output
+                        )
+
+                        logger.info(
+                            f"Created {fg.BLUE_FG}{len(chunks)}{RESET} size-based chunks"
+                        )
+                        return chunks
+
+                    action()
+                    # logger.info(f"Total chunks: {fg.CYAN}{total_chunks}{RESET}")
+
+                else:
+                    chunks = processor.split_by_size(
+                        args.file, size_bytes, sections, args.strict, output
+                    )
+
+                    print(f"Created {fg.BLUE_FG}{len(chunks)}{RESET} size-based chunks")
             except Exception as e:
                 print(f"Size split error: {fg.BRED_FG}{e}{RESET}")
 
@@ -134,10 +151,34 @@ def main():
                 duration_ms = (
                     int(duration) * 1000 if units == "sec" else duration * 1000 * 60
                 )
-                chunks = processor.split_by_time(
-                    args.file, duration_ms, sections, args.strict, output
-                )
-                print(f"Created {fg.BLUE_FG}{len(chunks)}{RESET} time-based chunks")
+                if input_file.is_dir():
+                    buster = DirBuster(args.file)
+                    file_targets = buster.get_dir_files()
+                    workers = 4 if len(file_targets) > 3 else len(file_targets)
+
+                    @threaded_for_loop(file_targets, max_workers=workers)
+                    def action(file):
+                        logger.info(
+                            f"Splitting {fg.BLUE_FG}{file}{RESET} time-based chunks"
+                        )
+                        chunks = processor.split_by_time(
+                            file, duration_ms, sections, args.strict, output
+                        )
+                        logger.info(
+                            f"Created {fg.BLUE_FG}{len(chunks)}{RESET} time-based chunks"
+                        )
+
+                        return chunks
+
+                    action()
+                    # logger.info(f"Total chunks: {fg.CYAN}{total_chunks}{RESET}")
+
+                else:
+                    chunks = processor.split_by_time(
+                        args.file, duration_ms, sections, args.strict, output
+                    )
+                    print(f"Created {fg.BLUE_FG}{len(chunks)}{RESET} time-based chunks")
+
             except Exception as e:
                 print(f"Time split error: {fg.BRED_FG}{e}{RESET}")
 
@@ -177,53 +218,6 @@ def main():
             raise SlicerArgumentException("You must use either --trim or --split")
         except Exception as e:
             print(f"{fg.BRED_FG}{e}{RESET}")
-
-
-def test():
-    # Initialize processor
-    processor = AudioProcessor(output_format="wav")
-
-    # Example 1: Split by time
-    try:
-        # Split into 30-second chunks, keep smaller last chunk
-        chunks = processor.split_by_time(
-            "input_audio.wav", 30000, sections="max", strict=False
-        )
-        print(f"Created {len(chunks)} time-based chunks")
-    except Exception as e:
-        print(f"Time split error: {e}")
-
-    # Example 2: Split by size (10MB chunks)
-    try:
-        chunks = processor.split_by_size(
-            "input_audio.wav", 10 * 1024 * 1024, strict=True
-        )
-        print(f"Created {len(chunks)} size-based chunks")
-    except Exception as e:
-        print(f"Size split error: {e}")
-
-    # Example 3: Trim operations
-    try:
-        # Trim first 5 seconds
-        trimmed = processor.trim("input_audio.wav", trim_start=5)
-        print(f"Trimmed start: {trimmed}")
-
-        # Trim last 10 seconds
-        trimmed = processor.trim("input_audio.wav", trim_end=10)
-        print(f"Trimmed end: {trimmed}")
-
-        # Keep only 34-38 minutes
-        trimmed = processor.trim("input_audio.wav", trim_range=(34 * 60, 38 * 60))
-        print(f"Trimmed range: {trimmed}")
-    except Exception as e:
-        print(f"Trim error: {e}")
-
-    # Example 4: Get audio info
-    try:
-        info = processor.get_audio_info("input_audio.wav")
-        print(f"Audio info: {info}")
-    except Exception as e:
-        print(f"Info error: {e}")
 
 
 if __name__ == "__main__":

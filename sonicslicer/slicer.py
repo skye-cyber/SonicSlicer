@@ -4,6 +4,9 @@ from pydub import AudioSegment
 from pydub.utils import make_chunks
 from .slicer_exceptions import SlicerException
 from .formarts import AudioFormarts
+from .utils.log.loger import get_logger
+
+logger = get_logger()
 
 
 class AudioProcessor:
@@ -132,7 +135,12 @@ class AudioProcessor:
                 chunks = chunks[:-1]  # Remove last chunk if too small
 
             if not chunks:
-                raise SlicerException("No chunks created - check duration parameters")
+                try:
+                    raise SlicerException(
+                        "No chunks created - check duration parameters"
+                    )
+                except SlicerException as e:
+                    logger.warn(e)
 
             _sections = 0 if sections == "max" else int(sections)
 

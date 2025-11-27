@@ -49,7 +49,7 @@ slicer file.mp3 --split --size 100kb --strict -O splits
 
 - Single split 5 minutes chunks
 ```shell
-slicer file.mp3 --split --duration 1min
+slicer file.mp3 --split --duration 5min
 ```
 
 **By File Time:**

@@ -7,7 +7,7 @@ EXCLUDE_FROM_PACKAGES = ["build", "dist", "test", "src", "*~", "*.db"]
 
 
 setup(
-    name="slicer",
+    name="sonicslicer",
     author="wambua",
     author_email="swskye17@gmail.com",
     version=open(os.path.abspath("version.txt")).read(),

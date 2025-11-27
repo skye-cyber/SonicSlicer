@@ -118,7 +118,6 @@ def main():
                     file_targets = buster.get_dir_files()
                     workers = 4 if len(file_targets) > 3 else len(file_targets)
 
-                    @threaded_for_loop(file_targets, max_workers=workers)
                     def action(file):
                         logger.info(
                             f"Splitting {fg.BLUE_FG}{file}{RESET} time-based chunks"
